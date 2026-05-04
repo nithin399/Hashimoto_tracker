@@ -306,7 +306,7 @@ menstrual irregularities, constipation, soy and food sensitivities."""
 
 def get_llm():
     return ChatGroq(
-        model="deepseek-r1-distill-llama-70b",
+        model="llama-3.3-70b-versatile",
         api_key=GROQ_API_KEY,
         temperature=0.7
     )
