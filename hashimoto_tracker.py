@@ -10,10 +10,20 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ═════════════════════════════════════════════════════
-# CONFIGURATION
+# CONFIGURATION — reads Streamlit secrets first
 # ═════════════════════════════════════════════════════
-GROQ_API_KEY   = os.environ.get("GROQ_API_KEY", "")
-SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "")
+def get_secret(key, default=""):
+    """Read from st.secrets first, then environment variables."""
+    try:
+        val = st.secrets.get(key, None)
+        if val:
+            return val
+    except Exception:
+        pass
+    return os.environ.get(key, default)
+
+GROQ_API_KEY   = get_secret("GROQ_API_KEY")
+SPREADSHEET_ID = get_secret("SPREADSHEET_ID")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -33,14 +43,48 @@ SHEET_NAMES = {
 # ═════════════════════════════════════════════════════
 @st.cache_resource
 def get_gsheet_client():
-    """Authenticate with Google Sheets using service account credentials."""
+    """Authenticate with Google Sheets — handles all private_key formats."""
     try:
-        creds_json = os.environ.get("GOOGLE_CREDENTIALS", "")
-        if not creds_json:
+        creds_dict = None
+
+        # Method 1: st.secrets as TOML section [GOOGLE_CREDENTIALS]
+        try:
+            raw = dict(st.secrets["GOOGLE_CREDENTIALS"])
+            # Fix private_key: replace literal \n with real newlines
+            if "private_key" in raw:
+                raw["private_key"] = raw["private_key"].replace("\\n", "\n").replace("\n", "\n")
+            creds_dict = raw
+        except Exception:
+            pass
+
+        # Method 2: st.secrets as raw JSON string GOOGLE_CREDENTIALS_JSON
+        if not creds_dict:
+            try:
+                raw_json = st.secrets.get("GOOGLE_CREDENTIALS_JSON", "")
+                if raw_json:
+                    creds_dict = json.loads(raw_json)
+            except Exception:
+                pass
+
+        # Method 3: environment variable as JSON string (local dev)
+        if not creds_dict:
+            raw_json = os.environ.get("GOOGLE_CREDENTIALS", "")
+            if raw_json:
+                creds_dict = json.loads(raw_json)
+
+        if not creds_dict:
             return None
-        creds_dict = json.loads(creds_json)
+
+        # Fix private_key newlines if needed
+        if "private_key" in creds_dict:
+            pk = creds_dict["private_key"]
+            if "\\n" in pk:
+                pk = pk.replace("\\n", "\n")
+            creds_dict["private_key"] = pk
+
         creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         return gspread.authorize(creds)
+
     except Exception as e:
         st.error(f"Google Sheets connection error: {e}")
         return None
@@ -258,11 +302,12 @@ def load_flares(client=None):
 # FLARE DETECTION
 # ═════════════════════════════════════════════════════
 FLARE_THRESHOLDS = {
-    "energy":       ("low",  4),
-    "brain_fog":    ("high", 7),
-    "joint_pain":   ("high", 7),
-    "mood":         ("low",  4),
-    "stress_level": ("high", 8),
+    "energy":        ("low",  4),
+    "brain_fog":     ("high", 7),
+    "joint_pain":    ("high", 7),
+    "carpal_tunnel": ("high", 6),
+    "mood":          ("low",  4),
+    "stress_level":  ("high", 8),
 }
 
 def detect_flare(log):
@@ -373,37 +418,49 @@ st.caption("Private · Secure · Cloud-backed · Your personal health companion"
 with st.sidebar:
     st.header("⚙️ Settings")
 
-    # Groq API
-    if not GROQ_API_KEY:
-        user_key = st.text_input("Groq API Key", type="password", placeholder="gsk_...")
+    # ── Groq API ──────────────────────────────────────
+    # Re-read in case secrets loaded after module start
+    GROQ_API_KEY   = get_secret("GROQ_API_KEY")
+    SPREADSHEET_ID = get_secret("SPREADSHEET_ID")
+
+    if GROQ_API_KEY:
+        st.markdown('<div class="connected-box">✅ AI Connected (Groq)</div>',
+                    unsafe_allow_html=True)
+    else:
+        user_key = st.text_input("Groq API Key", type="password",
+                                  placeholder="gsk_...",
+                                  help="Get free key at console.groq.com")
         if user_key:
             GROQ_API_KEY = user_key
             os.environ["GROQ_API_KEY"] = user_key
-        st.caption("Get free key → console.groq.com")
-    else:
-        st.markdown('<div class="connected-box">✅ AI Connected (Groq)</div>', unsafe_allow_html=True)
+            st.rerun()
+        st.caption("Get free key → [console.groq.com](https://console.groq.com)")
 
     st.divider()
 
-    # Google Sheets
+    # ── Google Sheets ─────────────────────────────────
     st.subheader("☁️ Google Sheets Storage")
-    if not SPREADSHEET_ID:
-        sid = st.text_input("Spreadsheet ID", placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms")
+    if SPREADSHEET_ID:
+        st.markdown('<div class="connected-box">✅ Google Sheets Connected</div>',
+                    unsafe_allow_html=True)
+    else:
+        sid = st.text_input("Spreadsheet ID",
+                             placeholder="Paste your Sheet ID here",
+                             help="From your Google Sheet URL")
         if sid:
             SPREADSHEET_ID = sid
             os.environ["SPREADSHEET_ID"] = sid
-        st.caption("See setup guide in README")
-    else:
-        st.markdown('<div class="connected-box">✅ Google Sheets Connected</div>', unsafe_allow_html=True)
+            st.rerun()
+        st.caption("See SETUP_GUIDE.md for instructions")
 
     # Init Google client
     client = get_gsheet_client() if SPREADSHEET_ID else None
 
-    if client and SPREADSHEET_ID:
-        st.markdown('<div class="connected-box">☁️ All data syncing to Google Sheets</div>',
+    if client:
+        st.markdown('<div class="connected-box">☁️ Syncing to Google Sheets</div>',
                     unsafe_allow_html=True)
     else:
-        st.markdown('<div class="warn-box">💾 Saving locally only — connect Google Sheets for cloud sync</div>',
+        st.markdown('<div class="warn-box">💾 Local storage only</div>',
                     unsafe_allow_html=True)
         client = None
 
@@ -455,6 +512,7 @@ with tab1:
         hair_loss = st.selectbox("Hair loss today", hair_opts,
                         index=hair_opts.index(existing.get("hair_loss", "None")))
         joint_pain        = st.slider("Joint/muscle pain (1=none)", 1, 10, int(existing.get("joint_pain", 1)))
+        carpal_tunnel     = st.slider("Carpal tunnel pain (1=none)", 1, 10, int(existing.get("carpal_tunnel", 1)))
         bloating          = st.slider("Bloating/digestion (1=none)", 1, 10, int(existing.get("bloating", 1)))
         constipation_opts = ["None", "Mild", "Moderate", "Severe"]
         constipation      = st.selectbox("Constipation today", constipation_opts,
@@ -500,7 +558,7 @@ with tab1:
             bed_time=str(bed_time), wake_time=str(wake_time),
             weight=weight, temp_sensitivity=temp_sensitivity,
             hair_loss=hair_loss, joint_pain=joint_pain,
-            bloating=bloating, constipation=constipation,
+            bloating=bloating, carpal_tunnel=carpal_tunnel, constipation=constipation,
             menstrual_notes=menstrual_notes,
             med_taken=med_taken, med_time=str(med_time),
             gluten_free=gluten_free, dairy_free=dairy_free,
@@ -628,7 +686,7 @@ with tab3:
         df = pd.DataFrame(all_logs).T.reset_index().rename(columns={"index": "date"})
         df["date"] = pd.to_datetime(df["date"])
         num_cols = ["energy","mood","brain_fog","sleep_hrs","weight",
-                    "stress_level","joint_pain","bloating","hydration"]
+                    "stress_level","joint_pain","carpal_tunnel","bloating","hydration"]
         for col in num_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
