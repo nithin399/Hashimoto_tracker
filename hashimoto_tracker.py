@@ -101,10 +101,11 @@ def get_or_create_sheet(client, sheet_name):
         st.error(f"Sheet error: {e}")
         return None
 
-def sheet_to_df(client, sheet_name):
-    """Read a sheet into a DataFrame."""
+@st.cache_data(ttl=60)
+def sheet_to_df(_client, sheet_name):
+    """Read a sheet into a DataFrame. Cached for 60 seconds to avoid quota."""
     try:
-        ws = get_or_create_sheet(client, sheet_name)
+        ws = get_or_create_sheet(_client, sheet_name)
         if ws is None:
             return pd.DataFrame()
         data = ws.get_all_records()
@@ -209,10 +210,11 @@ def save_daily_log(data, client=None):
     logs[data["date"]] = data
     save_json(LOGS_FILE, logs)
 
-def load_daily_logs(client=None):
-    if client and SPREADSHEET_ID:
+@st.cache_data(ttl=60)
+def load_daily_logs(_client=None):
+    if _client and SPREADSHEET_ID:
         try:
-            df = sheet_to_df(client, SHEET_NAMES["logs"])
+            df = sheet_to_df(_client, SHEET_NAMES["logs"])
             if not df.empty and "date" in df.columns:
                 return df.set_index("date").to_dict(orient="index")
         except Exception:
@@ -227,10 +229,11 @@ def save_lab(data, client=None):
     labs[data["timestamp"]] = data
     save_json(LABS_FILE, labs)
 
-def load_labs(client=None):
-    if client and SPREADSHEET_ID:
+@st.cache_data(ttl=60)
+def load_labs(_client=None):
+    if _client and SPREADSHEET_ID:
         try:
-            df = sheet_to_df(client, SHEET_NAMES["labs"])
+            df = sheet_to_df(_client, SHEET_NAMES["labs"])
             if not df.empty:
                 return df.to_dict(orient="records")
         except Exception:
@@ -253,10 +256,11 @@ def save_supplement(supps, client=None):
         except Exception:
             pass
 
-def load_supplements(client=None):
-    if client and SPREADSHEET_ID:
+@st.cache_data(ttl=60)
+def load_supplements(_client=None):
+    if _client and SPREADSHEET_ID:
         try:
-            df = sheet_to_df(client, SHEET_NAMES["supplements"])
+            df = sheet_to_df(_client, SHEET_NAMES["supplements"])
             if not df.empty and "name" in df.columns:
                 result = {}
                 for _, row in df.iterrows():
@@ -282,10 +286,11 @@ def save_flare_record(flare_data, client=None):
         flat.update(flare_data.get("snapshot", {}))
         append_row(client, SHEET_NAMES["flares"], flat)
 
-def load_flares(client=None):
-    if client and SPREADSHEET_ID:
+@st.cache_data(ttl=60)
+def load_flares(_client=None):
+    if _client and SPREADSHEET_ID:
         try:
-            df = sheet_to_df(client, SHEET_NAMES["flares"])
+            df = sheet_to_df(_client, SHEET_NAMES["flares"])
             if not df.empty:
                 result = {}
                 for _, row in df.iterrows():
@@ -571,6 +576,7 @@ with tab1:
         )
         with st.spinner("Saving..."):
             save_daily_log(new_log, client)
+            st.cache_data.clear()
         alerts = detect_flare(new_log)
         if alerts:
             flare_data = {
@@ -625,6 +631,7 @@ with tab2:
         )
         with st.spinner("Saving lab results..."):
             save_lab(lab_data, client)
+            st.cache_data.clear()
         st.success("✅ Lab results saved!")
 
     st.divider()
@@ -857,6 +864,7 @@ with tab5:
             }
             with st.spinner("Saving..."):
                 save_supplement(supps, client)
+                st.cache_data.clear()
             st.success(f"✅ {supp_name} added!")
             st.rerun()
 
