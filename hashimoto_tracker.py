@@ -545,7 +545,7 @@ with tab1:
         soy_free         = st.checkbox("Soy free today?",                bool(existing.get("soy_free", False)))
         histamine_free   = st.checkbox("Histamine friendly diet today?",  bool(existing.get("histamine_free", False)))
         no_allergy_foods = st.checkbox("No beans & allergy foods today?", bool(existing.get("no_allergy_foods", False)))
-        hydration        = st.number_input("💧 Hydration (glasses of water)", 0, 20, int(existing.get("hydration", 8)))
+        hydration        = st.number_input("💧 Hydration (litres)", 0.0, 10.0, float(existing.get("hydration", 2.0)), 0.1)
         stress_level     = st.slider("Stress level", 1, 10, int(existing.get("stress_level", 5)))
         notes            = st.text_area("Notes / symptoms", str(existing.get("notes", "")))
 
@@ -714,7 +714,7 @@ with tab3:
                 st.plotly_chart(fig2, use_container_width=True)
             if "hydration" in df.columns:
                 fig5 = px.bar(df, x="date", y="hydration",
-                              title="Daily Hydration (glasses)",
+                              title="Daily Hydration (litres)",
                               color="hydration", color_continuous_scale="Blues")
                 st.plotly_chart(fig5, use_container_width=True)
         with col2:
@@ -1059,7 +1059,7 @@ with tab7:
                     Average brain fog: {avg_fog}/10
                     Average sleep: {avg_sleep} hours/night
                     Average stress: {avg_stress}/10
-                    Average hydration: {avg_hydration} glasses/day
+                    Average hydration: {avg_hydration} litres/day
                     Total flares this period: {len(flares)}
                     Current supplements: {', '.join(active_supps) if active_supps else 'None recorded'}
                     Latest labs: {latest_labs}
