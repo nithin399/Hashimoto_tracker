@@ -725,7 +725,7 @@ with tab3:
                 st.plotly_chart(fig3, use_container_width=True)
             if all(c in df.columns for c in ["stress_level","energy"]):
                 fig4 = px.scatter(df, x="stress_level", y="energy",
-                                  title="Stress vs Energy", trendline="ols",
+                                  title="Stress vs Energy",
                                   color="mood", color_continuous_scale="RdYlGn")
                 st.plotly_chart(fig4, use_container_width=True)
 
