@@ -876,7 +876,7 @@ with tab5:
         st.info("No supplements added yet.")
     else:
         taken_today  = st.session_state.get(today_key, {})
-        active_supps = {k: v for k, v in supps.items() if str(v.get("active", True)) == "True"}
+        active_supps = {k: v for k, v in supps.items() if str(v.get("active", True)).lower() in ("true", "1", "yes")}
 
         for supp_id, info in active_supps.items():
             c1, c2, c3, c4 = st.columns([3, 2, 2, 1])
@@ -893,6 +893,7 @@ with tab5:
                 if st.button("🗑️", key=f"del_{supp_id}"):
                     supps[supp_id]["active"] = False
                     save_supplement(supps, client)
+                    invalidate_cache()
                     st.rerun()
 
         st.session_state[today_key] = taken_today
